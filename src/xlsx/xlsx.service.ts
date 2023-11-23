@@ -1,9 +1,9 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { read, utils } from 'xlsx';
 import { UploadFileDto } from './dto/upload-file.dto';
-import path from 'path';
+import path, { join } from 'path';
 import { JSON_DIR_NAME } from './consts';
-import jsonfile from 'jsonfile';
+import jsonfile, { readFile as readJson } from 'jsonfile';
 import { GetFileDto } from './dto/get-file.dto';
 
 @Injectable()
@@ -15,10 +15,18 @@ export class XlsxService {
   }
 
   getFile({ id, parsed }: GetFileDto) {
-    return {
-      id,
-      parsed,
-    };
+    const jsonFilePath = join(process.cwd(), JSON_DIR_NAME, `${id}.json`);
+
+    return readJson(jsonFilePath)
+      .then((file) => {
+        return {
+          jsonContent: file,
+        };
+      })
+      .catch((error) => {
+        console.error(error);
+        throw new HttpException('JSON file not found.', HttpStatus.NOT_FOUND);
+      });
   }
 
   handleFileUpload({ file, sheetName, id, range }: UploadFileDto) {
@@ -50,17 +58,16 @@ export class XlsxService {
       // Generate a unique filename for the JSON file
       const fileId = id || Date.now().toString();
       const jsonFilePath = path.join(
-        __dirname,
+        process.cwd(),
         JSON_DIR_NAME,
         `${fileId}.json`,
       );
 
       // Save the JSON data to the file
-      jsonfile
+      return jsonfile
         .writeFile(jsonFilePath, jsonData)
         .then(() => {
           const fileName = `${fileId}`;
-
           return { fileName };
         })
         .catch((error) => {
@@ -70,10 +77,6 @@ export class XlsxService {
             HttpStatus.CONFLICT,
           );
         });
-
-      return {
-        wbSheetName,
-      };
     } catch (error) {
       throw new HttpException(
         `File processing error ${error}`,
